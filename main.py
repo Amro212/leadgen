@@ -6,6 +6,7 @@ import argparse
 from typing import List, Dict
 from utils.logging_utils import get_logger
 from models.lead import Lead
+from discovery.aggregator import discover_leads
 
 # Initialize logger
 log = get_logger(__name__)
@@ -25,11 +26,10 @@ def discovery_stage(vertical: str, region: str, max_results: int) -> List[Dict]:
     """
     log.info(f"🔍 Discovery: Searching for '{vertical}' in '{region}'")
     
-    # TODO: Implement actual discovery (T08-T10)
-    # For now, return empty list
-    leads = []
+    # Use aggregator to discover and dedupe leads (T08-T10)
+    leads = discover_leads(vertical, region, max_results)
     
-    log.info(f"✓ Discovery complete: Found {len(leads)} leads")
+    log.info(f"✓ Discovery complete: Found {len(leads)} unique leads")
     return leads
 
 
