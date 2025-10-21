@@ -42,6 +42,10 @@ class DiscoveryAggregator:
         raw_leads = self.google_scraper.fetch_leads(query, location, max_results)
         log.info(f"Initial discovery returned {len(raw_leads)} leads")
         
+        # Set discovery_method for all leads
+        for lead in raw_leads:
+            lead['discovery_method'] = 'Sample Data Generator'  # Will be 'Yelp API' or 'Google Places API' later
+        
         # Step 2: Enrich with Yelp profile data
         enriched_leads = []
         for lead in raw_leads:

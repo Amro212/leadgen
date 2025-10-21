@@ -42,6 +42,7 @@ BUSINESS_TEMPLATES = [
 
 # Realistic phone number generator
 def generate_phone():
+    """Generate a properly formatted E.164 phone number."""
     area = random.choice(['905', '416', '647', '289'])
     exchange = random.randint(200, 999)
     number = random.randint(1000, 9999)
@@ -83,6 +84,21 @@ class GoogleScraper(DiscoverySource):
         # Extract city from location
         city = location.split(',')[0].strip() if ',' in location else location
         
+        # Real working websites for enrichment testing
+        # These are actual business sites that can be scraped successfully
+        real_test_websites = [
+            "https://www.github.com",
+            "https://www.stripe.com",
+            "https://www.python.org",
+            "https://www.shopify.com",
+            "https://www.squarespace.com",
+            "https://www.wordpress.org",
+            "https://www.wix.com",
+            "https://www.godaddy.com",
+            "https://www.mailchimp.com",
+            "https://www.hubspot.com",
+        ]
+        
         # Generate varied business names
         leads = []
         templates = random.sample(BUSINESS_TEMPLATES, min(max_results, len(BUSINESS_TEMPLATES)))
@@ -94,10 +110,15 @@ class GoogleScraper(DiscoverySource):
             has_website = random.random() > 0.2  # 80% have websites
             has_phone = random.random() > 0.1    # 90% have phones
             
+            # Use real test websites for enrichment testing
+            website = None
+            if has_website:
+                website = real_test_websites[i % len(real_test_websites)]
+            
             lead = {
                 "business_name": business_name,
                 "city": city,
-                "website": f"https://{business_name.lower().replace(' ', '')}.com" if has_website else None,
+                "website": website,
                 "phone": generate_phone() if has_phone else None,
                 "source": "Sample Data",
                 "source_url": f"https://yelp.com/biz/{business_name.lower().replace(' ', '-')}-{city.lower()}",

@@ -99,10 +99,23 @@ def export_stage(leads: List[Lead], vertical: str, region: str) -> None:
     """
     log.info(f"💾 Export: Saving {len(leads)} leads")
     
-    # TODO: Implement actual export (T16-T17)
-    # For now, just log
+    from export.csv_export import export_to_csv, get_export_stats
+    from export.report_generator import generate_summary_report
     
-    log.info(f"✓ Export complete: {len(leads)} leads saved")
+    # Export to CSV
+    csv_path = export_to_csv(leads, vertical, region)
+    
+    # Generate summary report
+    report_path = generate_summary_report(leads, vertical, region, csv_path)
+    
+    # Get and log statistics
+    stats = get_export_stats(leads)
+    log.info(f"✓ Export complete:")
+    log.info(f"  📄 CSV: {csv_path}")
+    log.info(f"  📊 Report: {report_path}")
+    log.info(f"  📈 Stats: {stats['total_leads']} leads, "
+            f"A={stats['tier_a']}, B={stats['tier_b']}, C={stats['tier_c']}, "
+            f"Avg={stats['avg_score']}")
 
 
 def run_pipeline(vertical: str, region: str, max_results: int = 25) -> None:

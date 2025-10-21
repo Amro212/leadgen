@@ -3,13 +3,21 @@ Lead data model.
 Defines the core data structure for a business lead.
 """
 from typing import Optional, Dict, List, Any
-from pydantic import BaseModel, Field, HttpUrl
+from pydantic import BaseModel, Field
+from datetime import datetime
+import uuid
 
 
 class Lead(BaseModel):
     """
     Represents a business lead with discovery, enrichment, and scoring data.
     """
+    
+    # Meta fields
+    lead_id: str = Field(default_factory=lambda: str(uuid.uuid4()), description="Unique lead identifier")
+    scrape_date: str = Field(default_factory=lambda: datetime.utcnow().isoformat(), description="UTC timestamp of scrape")
+    discovery_method: Optional[str] = Field(None, description="Source method (e.g., Yelp API, Google Places, Scraper)")
+    status: str = Field("success", description="Processing status: success/fail")
     
     # Core business information
     business_name: str = Field(..., description="Name of the business")
@@ -18,14 +26,9 @@ class Lead(BaseModel):
     website: Optional[str] = Field(None, description="Business website URL")
     phone: Optional[str] = Field(None, description="Business phone number")
     
-    # Enrichment signals
-    signals: Dict[str, Any] = Field(
-        default_factory=dict,
-        description="Enrichment signals (emails, forms, keywords, tech stack)"
-    )
-    
-    # Email findings
-    emails: List[str] = Field(default_factory=list, description="Found email addresses")
+    # Email findings (flattened from list to single primary email)
+    email: Optional[str] = Field(None, description="Primary contact email")
+    emails: List[str] = Field(default_factory=list, description="All found email addresses")
     
     # Feature flags (from enrichment)
     has_contact_form: Optional[bool] = Field(None, description="Website has contact form")
@@ -34,7 +37,7 @@ class Lead(BaseModel):
     has_financing: Optional[bool] = Field(None, description="Offers financing options")
     uses_https: Optional[bool] = Field(None, description="Website uses HTTPS")
     
-    # Technology signals
+    # Technology signals (commented out until populated - will be in internal_notes for now)
     tech_stack: List[str] = Field(
         default_factory=list,
         description="Detected technologies (WordPress, Wix, etc.)"
@@ -47,7 +50,24 @@ class Lead(BaseModel):
     # Metadata
     source: Optional[str] = Field(None, description="Discovery source (Google, Yelp, etc.)")
     source_url: Optional[str] = Field(None, description="URL where lead was discovered")
-    notes: List[str] = Field(default_factory=list, description="Processing notes and errors")
+    
+    # Enrichment summary
+    enrichment_summary: Optional[str] = Field(None, description="Summary of key features detected")
+    
+    # Internal tracking
+    internal_notes: Optional[str] = Field(None, description="Debug and processing notes")
+    notes: List[str] = Field(default_factory=list, description="Processing notes and errors (internal)")
+    
+    # Enrichment signals (internal - not in CSV)
+    signals: Dict[str, Any] = Field(
+        default_factory=dict,
+        description="Enrichment signals (internal tracking)"
+    )
+    
+    # Future outreach placeholders (optional)
+    outreach_snippet: Optional[str] = Field(None, description="Suggested outreach snippet")
+    email_subject: Optional[str] = Field(None, description="Suggested email subject line")
+    email_body: Optional[str] = Field(None, description="Suggested email body template")
     
     class Config:
         """Pydantic configuration."""

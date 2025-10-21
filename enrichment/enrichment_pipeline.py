@@ -47,6 +47,8 @@ class WebsiteEnrichment(EnrichmentSource):
                     # Merge signals into lead (preserve existing data)
                     if signals['emails']:
                         enriched_lead['emails'] = signals['emails']
+                        # Set primary email
+                        enriched_lead['email'] = signals['emails'][0]
                     
                     if signals['has_contact_form'] is not None:
                         enriched_lead['has_contact_form'] = signals['has_contact_form']
