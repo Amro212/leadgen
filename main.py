@@ -64,15 +64,25 @@ def scoring_stage(leads: List[Dict]) -> List[Lead]:
     """
     log.info(f"📊 Scoring: Evaluating {len(leads)} leads")
     
-    # TODO: Implement actual scoring (T14-T15)
-    # For now, convert to Lead objects with default scores
+    from scoring.scoring_engine import score_lead
+    
     scored_leads = []
+    tier_counts = {"A": 0, "B": 0, "C": 0}
+    
     for lead_dict in leads:
+        # Calculate score and tier
+        scoring_result = score_lead(lead_dict)
+        
+        # Add score and tier to dict
+        lead_dict['score'] = scoring_result['score']
+        lead_dict['tier'] = scoring_result['tier']
+        
+        # Convert to Lead object
         lead = Lead(**lead_dict)
         scored_leads.append(lead)
-    
-    # Count by tier (once scoring is implemented)
-    tier_counts = {"A": 0, "B": 0, "C": 0, "None": len(scored_leads)}
+        
+        # Count tiers
+        tier_counts[lead.tier] += 1
     
     log.info(f"✓ Scoring complete: A={tier_counts['A']}, B={tier_counts['B']}, C={tier_counts['C']}")
     return scored_leads
