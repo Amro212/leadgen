@@ -45,9 +45,8 @@ def enrichment_stage(leads: List[Dict]) -> List[Dict]:
     """
     log.info(f"🔬 Enrichment: Processing {len(leads)} leads")
     
-    # TODO: Implement actual enrichment (T11-T13)
-    # For now, return input unchanged
-    enriched = leads
+    from enrichment.enrichment_pipeline import enrich_leads
+    enriched = enrich_leads(leads)
     
     log.info(f"✓ Enrichment complete: {len(enriched)} leads processed")
     return enriched

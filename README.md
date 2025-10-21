@@ -9,7 +9,7 @@ Python-based lead generation tool for discovering, enriching, scoring, and expor
 pip install -r requirements.txt
 
 # Run the pipeline
-python main.py --vertical HVAC --region "Milton, Ontario" --max 50
+python main.py --vertical HVAC --region "Oakville, Ontario" --max 10
 ```
 
 ## Architecture
