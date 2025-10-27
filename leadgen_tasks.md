@@ -190,29 +190,172 @@
 
 ---
 
-## Phase 9 — Optional Free/Trial API Upgrades (Swap‑in tasks)
+## Phase 9 — API Integration Sprint (7 Days, Real Data)
 
-### T25 — Integrate Yelp Fusion API (discovery)
-**Goal:** Cleaner discovery.
-- **Start:** API key available.
-- **Actions:** New class `YelpAPI(DiscoverySource)`; call `/businesses/search` with term+location; map to lead dict shape.
-- **End/Test:** 10 results returned with name/city/phone/website.
+> **Available APIs:** Yelp (500/day), Google Places (2,000/mo), Hunter.io (25/mo), Tavily (4,000/mo), Gemini (1,500/day)
 
-### T26 — Integrate Google Places (trial credit)
-**Goal:** Reliable discovery.
-- **Start:** API key available.
-- **Actions:** Class `GooglePlacesAPI(DiscoverySource)` using Text Search + Details; compose fields; respect quotas.
-- **End/Test:** 10–20 results with website/phone.
+### Phase 9A — Discovery APIs (Days 1–3)
 
-### T27 — Integrate Hunter.io (emails)
-**Goal:** Better email coverage.
-- **Start:** API key available.
-- **Actions:** `hunter_api.py` adds `find_emails(domain)`; enrich leads missing emails; cache results.
-- **End/Test:** For 5 domains, at least some emails returned and attached.
+#### T25 — Integrate Yelp Fusion API (Primary Discovery)
+**Goal:** Replace sample data with real businesses.
+- **Start:** YELP_API_KEY in `.env`.
+- **Actions:**
+  - Create `discovery/yelp_fusion_api.py` implementing `DiscoverySource` interface
+  - Call `/businesses/search` endpoint with term + location + radius
+  - Map response to lead dict: name, city, region, phone, website, address, rating
+  - Implement rate limiter: max 500/day, track in `storage/api_usage.json`
+  - Add logging: show daily quota remaining after each call
+  - Fallback: if quota exceeded, switch to Google Places or sample data
+- **End/Test:** 
+  - `python main.py --vertical HVAC --region "Milton, Ontario" --max 50`
+  - Returns 50 real Yelp businesses (not sample data)
+  - CSV contains actual phone numbers, websites, ratings
+  - `storage/api_usage.json` shows: `{"yelp": {"daily": 50, "last_reset": "2025-10-27"}}`
+
+#### T26 — Integrate Google Places API (Secondary Discovery)
+**Goal:** Fallback discovery + enhanced attributes.
+- **Start:** GOOGLE_API_KEY in `.env`.
+- **Actions:**
+  - Create `discovery/google_places_api.py` implementing `DiscoverySource` interface
+  - Call Text Search API to find businesses, then Details API for full data
+  - Extract: name, address, phone, website, opening_hours, rating, reviews_url
+  - Implement quota tracker: max 2,000/month (~67/day), warn when approaching limit
+  - Use only if: (a) Yelp quota exceeded OR (b) `--use-google-places` flag
+  - Cache results to avoid duplicate calls
+- **End/Test:**
+  - Run when Yelp exhausted: `python main.py --vertical Plumbing --region "Toronto, ON" --max 50`
+  - Google Places fills remaining leads
+  - CSV shows Google-sourced leads with different attributes than Yelp
+  - `storage/api_usage.json` shows: `{"google_places": {"monthly": 50, "last_reset": "2025-10"}}`
+
+#### T26.5 — Discovery Aggregator Enhancement (Fallback Chain)
+**Goal:** Intelligent API selection.
+- **Start:** Both Yelp and Google implementations complete.
+- **Actions:**
+  - Modify `discovery/aggregator.py` to check quotas before calling each API
+  - Priority order: Yelp → Google Places → SerpAPI → Sample Data
+  - Log which API provided each lead (add `discovery_source` field)
+  - Skip to next API if current exceeds quota
+- **End/Test:**
+  - Run large batch: `python main.py --vertical HVAC --region "Toronto, ON" --max 150`
+  - First 100 from Yelp, next 50 from Google, no sample data
+  - CSV column shows: "yelp_api", "google_places_api", "google_places_api", ...
 
 ---
 
-## Done Criteria
-- `python main.py --vertical HVAC --region "Milton, Ontario" --max 50` produces a CSV + summary with A/B/C tiers.
-- Logs are readable; failures don’t crash the run.
-- Modules are swappable via imports without changing the orchestrator.
+### Phase 9B — Enrichment APIs (Days 4–5)
+
+#### T27 — Integrate Hunter.io Email Finder (High-Value Leads Only)
+**Goal:** Verify emails on Tier A leads.
+- **Start:** HUNTER_API_KEY in `.env`.
+- **Actions:**
+  - Create `enrichment/hunter_email_finder.py`
+  - Call `hunter.io/v2/domain-search` with domain from lead website
+  - Extract primary email, all emails, confidence score
+  - **Only run for:** Tier A leads (score ≥ 65)
+  - Implement quota tracker: max 25/month, warn at 20/25
+  - Add to enrichment pipeline as optional enhancement step
+  - Store: `lead['emails_verified']` and `lead['email_confidence']`
+- **End/Test:**
+  - Run enrichment on 10 leads, 5 Tier A + 5 Tier B/C
+  - Only Tier A leads get Hunter queries
+  - CSV shows verified emails for A-tier, empty for others
+  - `storage/api_usage.json` shows: `{"hunter": {"monthly": 5, "last_reset": "2025-10"}}`
+
+#### T28 — Integrate Tavily Deep Research (A-Tier Intelligence)
+**Goal:** Add verification + market insights for top leads.
+- **Start:** TAVILY_API_KEY in `.env`.
+- **Actions:**
+  - Create `enrichment/tavily_researcher.py`
+  - Call `/search` endpoint with query: `"{business_name}" {city} reviews reputation`
+  - Extract: recent mentions, verified status, customer sentiment, market trends
+  - **Only run for:** Tier A leads (score ≥ 75)
+  - Implement quota tracker: max 4,000/month, budget ~130/day
+  - Add to enrichment pipeline; runs after Hunter
+  - Store: `lead['tavily_research']` dict with sources, snippets, sentiment
+- **End/Test:**
+  - Run enrichment; Tier A leads show Tavily data
+  - CSV includes new column: `ai_research_summary` (truncated to 200 chars)
+  - Example: "✓ Verified active. Recent positive reviews. Uses modern booking tech."
+  - `storage/api_usage.json` shows: `{"tavily": {"monthly": 10, "last_reset": "2025-10"}}`
+
+---
+
+### Phase 6 (Moved) — AI Outreach (Day 6)
+
+#### T18 — Gemini Outreach Generator (Personalized Emails)
+**Goal:** AI-generated personalized outreach.
+- **Start:** GEMINI_API_KEY in `.env`.
+- **Actions:**
+  - Create `outreach/gemini_generator.py`
+  - Call Gemini API with prompt: business context + missing features + Tavily insights
+  - Generate: personalized email subject + body (≤150 words, warm tone)
+  - **Only run for:** Tier A/B leads (score ≥ 45)
+  - Implement quota tracker: max 1,500/day, use ~50/day for MVP
+  - Add to export stage; append to CSV as new columns
+  - Store: `lead['outreach_subject']` and `lead['outreach_body']`
+- **End/Test:**
+  - Export run includes outreach columns
+  - CSV shows personalized emails for A/B leads
+  - Example: "Subject: Help ABC Plumbing add online booking. Body: We noticed..."
+  - `storage/api_usage.json` shows: `{"gemini": {"daily": 20, "last_reset": "2025-10-27"}}`
+
+---
+
+### Phase 8 (Enhanced) — Rate Limit Management & Monitoring
+
+#### T29 — API Usage Tracker & Dashboard
+**Goal:** Real-time quota visibility.
+- **Start:** None.
+- **Actions:**
+  - Create `storage/api_usage.py` with `APIUsageTracker` class
+  - Tracks daily/monthly quotas; auto-resets on period boundaries
+  - Saves state to `output/api_usage.json` after each call
+  - Implement `get_status()` method returning quota summary
+  - Integrate into main.py logging: print before/after pipeline
+- **End/Test:**
+  - Run pipeline; logs show: "📊 API Usage: Yelp 50/500 | Google 10/2000 | Hunter 5/25 | Tavily 10/4000 | Gemini 20/1500"
+  - `output/api_usage.json` persists across runs
+  - Next run shows updated counts
+
+#### T30 — Alert System for Quota Warnings
+**Goal:** Prevent unexpected API exhaustion.
+- **Start:** API usage tracker exists.
+- **Actions:**
+  - Add threshold alerts: warn at 80% of monthly quota, 90% of daily
+  - Log warnings to console + `logs/app.log`
+  - Example: "⚠️ Hunter.io: 20/25 used (80%). Only 5 searches remaining this month."
+  - Optional: send email alert if configured (for future)
+- **End/Test:**
+  - Simulate high usage; alerts appear
+  - No silent failures due to quota exhaustion
+
+---
+
+## Done Criteria (MVP Complete)
+
+### Phase 1–5 (Completed ✅)
+- Discovery, enrichment, scoring, export all functional
+- CSV + markdown summary generated
+- A/B/C tiers assigned
+- Logs readable; error handling in place
+
+### Phase 9A–9B (7-Day API Sprint)
+- **Day 1 (T25):** `python main.py --vertical HVAC --region "Milton, Ontario" --max 50` returns 50 real Yelp businesses
+- **Day 2 (T26):** Google Places fallback working; handles quota switching
+- **Day 3 (T26.5):** Aggregator logs discovery source for each lead
+- **Day 4 (T27):** Tier A leads have verified emails from Hunter.io
+- **Day 5 (T28):** Tier A leads have Tavily research + sentiment
+- **Day 6 (T18):** CSV includes AI-generated outreach emails for A/B leads
+- **Day 7 (T29–T30):** API usage tracked + quota warnings logged
+
+### Final Output
+```csv
+lead_id,business_name,phone,website,email,score,tier,discovery_source,emails_verified,ai_research_summary,outreach_subject,outreach_body
+...
+```
+
+- All data real (Yelp/Google, not sample)
+- All top-tier leads enriched (Hunter.io + Tavily)
+- All outreach personalized (Gemini)
+- All API quotas tracked + visible
