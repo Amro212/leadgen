@@ -1,11 +1,12 @@
 """
 Discovery aggregator - combines and deduplicates leads from multiple sources.
 """
-from typing import List, Dict, Set
+from typing import List, Dict, Set, Optional
 from urllib.parse import urlparse
 from utils.logging_utils import get_logger
 from discovery.google_scraper import GoogleScraper
 from discovery.yelp_scraper import YelpScraper
+from storage.api_usage import get_tracker
 
 log = get_logger(__name__)
 
@@ -13,11 +14,22 @@ log = get_logger(__name__)
 class DiscoveryAggregator:
     """
     Aggregates leads from multiple discovery sources and deduplicates.
+    Priority: Yelp Fusion API → Google Places API → Sample Data
     """
     
     def __init__(self):
         self.google_scraper = GoogleScraper()
         self.yelp_scraper = YelpScraper()
+        self.tracker = get_tracker()
+        
+        # Try to initialize Yelp Fusion API
+        try:
+            from discovery.yelp_fusion_api import YelpFusionAPI
+            self.yelp_api = YelpFusionAPI()
+            log.info("✅ Yelp Fusion API available")
+        except Exception as e:
+            log.warning(f"⚠️ Yelp Fusion API not available: {e}")
+            self.yelp_api = None
     
     def discover_and_aggregate(
         self,
@@ -27,6 +39,7 @@ class DiscoveryAggregator:
     ) -> List[Dict]:
         """
         Discover businesses and aggregate results.
+        Uses intelligent fallback: Yelp API → Sample Data
         
         Args:
             query: Business vertical
@@ -38,19 +51,49 @@ class DiscoveryAggregator:
         """
         log.info(f"Starting aggregated discovery for '{query}' in '{location}'")
         
-        # Step 1: Get initial leads from Google/search
-        raw_leads = self.google_scraper.fetch_leads(query, location, max_results)
+        # Log current API usage
+        self.tracker.log_status()
+        
+        raw_leads = []
+        
+        # PRIORITY 1: Try Yelp Fusion API (if available and has quota)
+        if self.yelp_api and self.tracker.can_use('yelp', count=1):
+            log.info("🎯 Using Yelp Fusion API (primary source)")
+            yelp_leads = self.yelp_api.fetch_leads(query, location, max_results)
+            
+            if yelp_leads:
+                raw_leads.extend(yelp_leads)
+                log.info(f"✓ Yelp API returned {len(yelp_leads)} leads")
+        else:
+            if not self.yelp_api:
+                log.warning("⚠️ Yelp API not initialized - skipping")
+            else:
+                remaining = self.tracker.get_remaining('yelp')
+                log.warning(f"⚠️ Yelp API quota exhausted ({remaining} remaining) - skipping")
+        
+        # FALLBACK: Sample data generator (if not enough leads from APIs)
+        if len(raw_leads) < max_results:
+            remaining_needed = max_results - len(raw_leads)
+            log.info(f"📝 Using sample data generator for remaining {remaining_needed} leads")
+            sample_leads = self.google_scraper.fetch_leads(query, location, remaining_needed)
+            raw_leads.extend(sample_leads)
+        
         log.info(f"Initial discovery returned {len(raw_leads)} leads")
         
-        # Set discovery_method for all leads
+        # Set discovery_method if not already set
         for lead in raw_leads:
-            lead['discovery_method'] = 'Sample Data Generator'  # Will be 'Yelp API' or 'Google Places API' later
+            if 'discovery_method' not in lead or not lead['discovery_method']:
+                lead['discovery_method'] = 'sample_data_generator'
         
-        # Step 2: Enrich with Yelp profile data
+        # Step 2: Enrich with Yelp profile data (only for non-API leads)
         enriched_leads = []
         for lead in raw_leads:
-            enriched = self.yelp_scraper.enrich_lead(lead)
-            enriched_leads.append(enriched)
+            # Skip enrichment if already from Yelp API
+            if lead.get('discovery_method') == 'yelp_fusion_api':
+                enriched_leads.append(lead)
+            else:
+                enriched = self.yelp_scraper.enrich_lead(lead)
+                enriched_leads.append(enriched)
         
         log.info(f"Enriched {len(enriched_leads)} leads with profile data")
         
@@ -80,20 +123,28 @@ class DiscoveryAggregator:
             # Create unique identifier
             identifiers = []
             
-            # 1. By website domain
+            # 1. By website domain (skip if it's a Yelp URL)
             if lead.get('website'):
                 domain = self._extract_domain(lead['website'])
-                if domain:
+                # Don't dedupe on Yelp domain (all API leads have yelp.com)
+                if domain and domain != 'yelp.com':
                     identifiers.append(f"domain:{domain}")
             
-            # 2. By name + phone
+            # 2. By name + phone (primary identifier for Yelp API leads)
             if lead.get('business_name') and lead.get('phone'):
                 name_phone = f"name_phone:{lead['business_name'].lower()}:{lead['phone']}"
                 identifiers.append(name_phone)
             
-            # 3. By source URL
+            # 3. By name + city (fallback if no phone)
+            if lead.get('business_name') and lead.get('city') and not lead.get('phone'):
+                name_city = f"name_city:{lead['business_name'].lower()}:{lead['city'].lower()}"
+                identifiers.append(name_city)
+            
+            # 4. By source URL (only if it's NOT a yelp.com URL)
             if lead.get('source_url'):
-                identifiers.append(f"url:{lead['source_url']}")
+                source_domain = self._extract_domain(lead['source_url'])
+                if source_domain and source_domain != 'yelp.com':
+                    identifiers.append(f"url:{lead['source_url']}")
             
             # Check if any identifier was seen before
             is_duplicate = False

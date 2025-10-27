@@ -23,9 +23,12 @@ class Settings(BaseSettings):
     # API Keys (optional)
     GOOGLE_API_KEY: Optional[str] = None
     YELP_API_KEY: Optional[str] = None
+    SERPAPI_API_KEY: Optional[str] = None
     HUNTER_API_KEY: Optional[str] = None
+    TAVILY_API_KEY: Optional[str] = None
     CLEARBIT_API_KEY: Optional[str] = None
     OPENAI_API_KEY: Optional[str] = None
+    GEMINI_API_KEY: Optional[str] = None
     
     # Database (optional)
     SUPABASE_URL: Optional[str] = None
