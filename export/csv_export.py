@@ -174,6 +174,11 @@ def _format_lead_for_csv(lead: Lead) -> dict:
         'yelp_review_count': lead.yelp_review_count if lead.yelp_review_count else "",
         'yelp_price_level': lead.yelp_price_level or "",
         
+        # Google Places metrics
+        'google_rating': lead.google_rating if lead.google_rating and lead.google_rating > 0 else "",
+        'google_review_count': lead.google_review_count if lead.google_review_count else "",
+        'google_price_level': lead.google_price_level if lead.google_price_level is not None else "",
+        
         # Website signals
         'has_contact_form': format_bool(lead.has_contact_form),
         'has_booking': format_bool(lead.has_booking),
@@ -238,6 +243,9 @@ def export_to_csv(leads: List[Lead], vertical: str, region: str) -> str:
         'yelp_rating',
         'yelp_review_count',
         'yelp_price_level',
+        'google_rating',
+        'google_review_count',
+        'google_price_level',
         'has_contact_form',
         'has_booking',
         'has_emergency_service',

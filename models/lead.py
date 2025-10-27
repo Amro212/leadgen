@@ -43,6 +43,12 @@ class Lead(BaseModel):
     yelp_price_level: Optional[str] = Field(None, description="Price level ($, $$, $$$, $$$$)")
     yelp_categories: List[str] = Field(default_factory=list, description="Yelp business categories")
     
+    # Google Places metrics (from discovery)
+    google_rating: Optional[float] = Field(None, ge=0, le=5, description="Google rating (0-5 stars)")
+    google_review_count: Optional[int] = Field(None, ge=0, description="Number of Google reviews")
+    google_price_level: Optional[int] = Field(None, ge=0, le=4, description="Google price level (0-4, 0=Free, 4=Very Expensive)")
+    google_place_id: Optional[str] = Field(None, description="Google Place ID for future API calls")
+    
     # Technology signals (commented out until populated - will be in internal_notes for now)
     tech_stack: List[str] = Field(
         default_factory=list,

@@ -30,6 +30,15 @@ class DiscoveryAggregator:
         except Exception as e:
             log.warning(f"⚠️ Yelp Fusion API not available: {e}")
             self.yelp_api = None
+        
+        # Try to initialize Google Places API
+        try:
+            from discovery.google_places_api import GooglePlacesAPI
+            self.google_places_api = GooglePlacesAPI()
+            log.info("✅ Google Places API available")
+        except Exception as e:
+            log.warning(f"⚠️ Google Places API not available: {e}")
+            self.google_places_api = None
     
     def discover_and_aggregate(
         self,
@@ -39,7 +48,7 @@ class DiscoveryAggregator:
     ) -> List[Dict]:
         """
         Discover businesses and aggregate results.
-        Uses intelligent fallback: Yelp API → Sample Data
+        Uses intelligent fallback: Yelp API → Google Places API → Sample Data
         
         Args:
             query: Business vertical
@@ -70,6 +79,24 @@ class DiscoveryAggregator:
             else:
                 remaining = self.tracker.get_remaining('yelp')
                 log.warning(f"⚠️ Yelp API quota exhausted ({remaining} remaining) - skipping")
+        
+        # PRIORITY 2: Try Google Places API (if not enough leads from Yelp)
+        if len(raw_leads) < max_results:
+            remaining_needed = max_results - len(raw_leads)
+            
+            if self.google_places_api and self.tracker.can_use('google_places', count=1):
+                log.info(f"🎯 Using Google Places API (secondary source) - need {remaining_needed} more leads")
+                google_leads = self.google_places_api.fetch_leads(query, location, remaining_needed)
+                
+                if google_leads:
+                    raw_leads.extend(google_leads)
+                    log.info(f"✓ Google Places API returned {len(google_leads)} leads")
+            else:
+                if not self.google_places_api:
+                    log.warning("⚠️ Google Places API not initialized - skipping")
+                else:
+                    remaining = self.tracker.get_remaining('google_places')
+                    log.warning(f"⚠️ Google Places API quota exhausted ({remaining} remaining) - skipping")
         
         # FALLBACK: Sample data generator (if not enough leads from APIs)
         if len(raw_leads) < max_results:
