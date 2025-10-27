@@ -159,10 +159,10 @@ class YelpFusionAPI(DiscoverySource):
             'zip_code': location.get('zip_code'),
             'source_url': business.get('url'),
             'discovery_method': 'yelp_fusion_api',
-            'rating': business.get('rating'),
-            'review_count': business.get('review_count'),
-            'price': business.get('price'),  # $ to $$$$
-            'categories': [cat['title'] for cat in business.get('categories', [])],
+            'yelp_rating': business.get('rating'),  # 1-5 star rating
+            'yelp_review_count': business.get('review_count'),  # Number of reviews
+            'yelp_price_level': business.get('price'),  # $ to $$$$
+            'yelp_categories': [cat['title'] for cat in business.get('categories', [])],
             'notes': [f"Yelp search: '{query}'"]  # Changed from internal_notes to notes (list field)
         }
         

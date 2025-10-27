@@ -37,6 +37,12 @@ class Lead(BaseModel):
     has_financing: Optional[bool] = Field(None, description="Offers financing options")
     uses_https: Optional[bool] = Field(None, description="Website uses HTTPS")
     
+    # Yelp metrics (from discovery)
+    yelp_rating: Optional[float] = Field(None, ge=0, le=5, description="Yelp rating (0-5 stars, 0 = no rating)")
+    yelp_review_count: Optional[int] = Field(None, ge=0, description="Number of Yelp reviews")
+    yelp_price_level: Optional[str] = Field(None, description="Price level ($, $$, $$$, $$$$)")
+    yelp_categories: List[str] = Field(default_factory=list, description="Yelp business categories")
+    
     # Technology signals (commented out until populated - will be in internal_notes for now)
     tech_stack: List[str] = Field(
         default_factory=list,

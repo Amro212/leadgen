@@ -169,6 +169,11 @@ def _format_lead_for_csv(lead: Lead) -> dict:
         'email': primary_email,
         'city': lead.city or "",
         
+        # Yelp metrics
+        'yelp_rating': lead.yelp_rating if lead.yelp_rating and lead.yelp_rating > 0 else "",
+        'yelp_review_count': lead.yelp_review_count if lead.yelp_review_count else "",
+        'yelp_price_level': lead.yelp_price_level or "",
+        
         # Website signals
         'has_contact_form': format_bool(lead.has_contact_form),
         'has_booking': format_bool(lead.has_booking),
@@ -230,6 +235,9 @@ def export_to_csv(leads: List[Lead], vertical: str, region: str) -> str:
         'phone',
         'email',
         'city',
+        'yelp_rating',
+        'yelp_review_count',
+        'yelp_price_level',
         'has_contact_form',
         'has_booking',
         'has_emergency_service',
