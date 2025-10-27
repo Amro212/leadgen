@@ -23,6 +23,10 @@ class GooglePlacesAPI(DiscoverySource):
     TEXT_SEARCH_URL = "https://maps.googleapis.com/maps/api/place/textsearch/json"
     DETAILS_URL = "https://maps.googleapis.com/maps/api/place/details/json"
     
+    # Contact fields: formatted_phone_number, international_phone_number, website
+    # These are billed at higher rate than basic fields
+    DETAILS_FIELDS = "formatted_phone_number,international_phone_number,website"
+    
     def __init__(self, api_key: Optional[str] = None):
         """
         Initialize Google Places API client.
@@ -103,6 +107,14 @@ class GooglePlacesAPI(DiscoverySource):
             for place in places[:limit]:
                 lead = self._map_to_lead(place, query)
                 if lead:
+                    # Optionally fetch detailed info (phone, website) using Place Details API
+                    place_id = place.get('place_id')
+                    if place_id:
+                        details = self._get_place_details(place_id)
+                        if details:
+                            # Merge details into lead
+                            lead.update(details)
+                    
                     leads.append(lead)
             
             return leads
@@ -185,4 +197,78 @@ class GooglePlacesAPI(DiscoverySource):
             
         except Exception as e:
             log.warning(f"⚠️ Failed to map place: {e}")
+            return None
+    
+    def _get_place_details(self, place_id: str) -> Optional[Dict]:
+        """
+        Fetch additional details for a place (phone, website) using Place Details API.
+        
+        Args:
+            place_id: Google Place ID
+        
+        Returns:
+            Dictionary with phone and website, or None if failed
+        """
+        try:
+            # Check quota (Details API counts as separate call)
+            if not self.tracker.can_use('google_places', count=1):
+                log.warning("⚠️ Google Places quota exhausted, skipping Place Details")
+                return None
+            
+            # Build request with only Contact fields (phone, website)
+            params = {
+                'place_id': place_id,
+                'fields': self.DETAILS_FIELDS,
+                'key': self.api_key
+            }
+            
+            response = requests.get(
+                self.DETAILS_URL,
+                params=params,
+                timeout=10
+            )
+            
+            response.raise_for_status()
+            data = response.json()
+            
+            if data.get('status') != 'OK':
+                log.debug(f"Place Details API status: {data.get('status')}")
+                return None
+            
+            result = data.get('result', {})
+            
+            # Increment usage counter for Details API call
+            self.tracker.increment('google_places', count=1)
+            
+            # Extract phone and website
+            details = {}
+            
+            # Prefer international_phone_number (E.164 format)
+            phone = result.get('international_phone_number') or result.get('formatted_phone_number')
+            if phone:
+                # Normalize to our format if needed
+                if phone.startswith('+1'):
+                    # E.164 format - convert to +1-XXX-XXX-XXXX
+                    digits = ''.join(filter(str.isdigit, phone))
+                    if len(digits) == 11 and digits[0] == '1':
+                        details['phone'] = f"+1-{digits[1:4]}-{digits[4:7]}-{digits[7:]}"
+                    else:
+                        details['phone'] = phone
+                else:
+                    details['phone'] = phone
+            
+            # Extract website
+            website = result.get('website')
+            if website:
+                details['website'] = website
+            
+            log.debug(f"   Details: phone={details.get('phone', 'N/A')}, website={details.get('website', 'N/A')}")
+            
+            return details
+            
+        except requests.exceptions.RequestException as e:
+            log.warning(f"⚠️ Place Details API request failed: {e}")
+            return None
+        except Exception as e:
+            log.warning(f"⚠️ Failed to fetch place details: {e}")
             return None
