@@ -54,6 +54,15 @@ class Lead(BaseModel):
     google_price_level: Optional[int] = Field(None, ge=0, le=4, description="Google price level (0-4, 0=Free, 4=Very Expensive)")
     google_place_id: Optional[str] = Field(None, description="Google Place ID for future API calls")
     
+    # Tavily research (from deep research - Tier A only)
+    tavily_verified: bool = Field(False, description="Tavily deep research was run")
+    tavily_website_found: Optional[str] = Field(None, description="Actual business website found by Tavily")
+    tavily_recent_activity: bool = Field(False, description="Business has recent mentions (last 6 months)")
+    tavily_reputation_score: int = Field(0, ge=0, le=100, description="Reputation score based on mentions (0-100)")
+    tavily_sources_found: int = Field(0, ge=0, description="Number of independent sources found")
+    tavily_review_sites: List[str] = Field(default_factory=list, description="Review platforms found (Google Maps, BBB, etc.)")
+    tavily_negative_flags: List[str] = Field(default_factory=list, description="Warning signs found during research")
+    
     # Technology signals (commented out until populated - will be in internal_notes for now)
     tech_stack: List[str] = Field(
         default_factory=list,

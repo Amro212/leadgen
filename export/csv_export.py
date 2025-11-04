@@ -184,6 +184,14 @@ def _format_lead_for_csv(lead: Lead) -> dict:
         'google_review_count': lead.google_review_count if lead.google_review_count else "",
         'google_price_level': lead.google_price_level if lead.google_price_level is not None else "",
         
+        # Tavily research
+        'tavily_verified': format_bool(lead.tavily_verified),
+        'tavily_website_found': lead.tavily_website_found or "",
+        'tavily_recent_activity': format_bool(lead.tavily_recent_activity),
+        'tavily_reputation_score': lead.tavily_reputation_score if lead.tavily_reputation_score > 0 else "",
+        'tavily_sources_found': lead.tavily_sources_found if lead.tavily_sources_found > 0 else "",
+        'tavily_review_sites': ", ".join(lead.tavily_review_sites) if lead.tavily_review_sites else "",
+        
         # Website signals
         'has_contact_form': format_bool(lead.has_contact_form),
         'has_booking': format_bool(lead.has_booking),
@@ -254,6 +262,12 @@ def export_to_csv(leads: List[Lead], vertical: str, region: str) -> str:
         'google_rating',
         'google_review_count',
         'google_price_level',
+        'tavily_verified',
+        'tavily_website_found',
+        'tavily_recent_activity',
+        'tavily_reputation_score',
+        'tavily_sources_found',
+        'tavily_review_sites',
         'has_contact_form',
         'has_booking',
         'has_emergency_service',

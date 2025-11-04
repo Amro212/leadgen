@@ -157,6 +157,96 @@ def hunter_enrichment_stage(leads: List[Lead]) -> List[Lead]:
     return leads
 
 
+def tavily_research_stage(leads: List[Lead]) -> List[Lead]:
+    """
+    Tavily deep research stage: Verify business & find actual website for Tier A leads.
+    
+    Args:
+        leads: Scored Lead objects (after Hunter.io)
+    
+    Returns:
+        List of leads with Tavily research data (Tier A only enriched)
+    """
+    try:
+        from enrichment.tavily_researcher import TavilyResearcher
+        from storage.api_usage import get_tracker
+        
+        tracker = get_tracker()
+        if not tracker.can_use('tavily', count=1):
+            log.info("⚠️ Tavily quota exhausted - skipping deep research")
+            return leads
+        
+        # Count Tier A leads
+        tier_a_leads = [lead for lead in leads if lead.tier == 'A']
+        
+        if not tier_a_leads:
+            log.info("ℹ️ No Tier A leads found - skipping Tavily research")
+            return leads
+        
+        log.info(f"🔍 Tavily: Researching {len(tier_a_leads)} Tier A leads")
+        
+        tavily = TavilyResearcher()
+        researched_count = 0
+        
+        for lead in tier_a_leads:
+            # Research business (finds website, reviews, reputation)
+            result = tavily.research_business(
+                business_name=lead.business_name,
+                city=lead.city or "",
+                website=lead.website
+            )
+            
+            # Update lead with Tavily data
+            if result['tavily_verified']:
+                # Update website if Tavily found a better one
+                if result['verified_website'] and 'yelp.com' not in (lead.website or ""):
+                    # Only override if current website is Yelp or empty
+                    if not lead.website or 'yelp.com' in lead.website:
+                        lead.website = result['verified_website']
+                        lead.notes.append(f"Tavily: Found actual website - {result['verified_website']}")
+                    else:
+                        # Store as alternative if different
+                        if result['verified_website'] != lead.website:
+                            lead.tavily_website_found = result['verified_website']
+                
+                researched_count += 1
+            
+            # Add Tavily metadata
+            lead.tavily_verified = result['tavily_verified']
+            lead.tavily_website_found = result['verified_website']
+            lead.tavily_recent_activity = result['recent_activity']
+            lead.tavily_reputation_score = result['reputation_score']
+            lead.tavily_sources_found = result['sources_found']
+            lead.tavily_review_sites = result['review_sites']
+            lead.tavily_negative_flags = result['negative_flags']
+            
+            # Add summary note
+            if result['tavily_verified']:
+                summary_parts = []
+                if result['verified_website']:
+                    summary_parts.append(f"Website verified")
+                if result['recent_activity']:
+                    summary_parts.append("Recent activity")
+                if result['reputation_score']:
+                    summary_parts.append(f"Reputation: {result['reputation_score']}/100")
+                if result['sources_found']:
+                    summary_parts.append(f"{result['sources_found']} sources")
+                
+                summary = f"Tavily: {', '.join(summary_parts)}"
+                lead.notes.append(summary)
+                
+                # Warn about negative flags
+                if result['negative_flags']:
+                    lead.notes.append(f"⚠️ Tavily: {len(result['negative_flags'])} negative flags found")
+        
+        log.info(f"✓ Tavily: Researched {researched_count}/{len(tier_a_leads)} Tier A leads")
+        
+    except Exception as e:
+        log.warning(f"⚠️ Tavily research failed: {e}")
+    
+    return leads
+
+
 def export_stage(leads: List[Lead], vertical: str, region: str) -> None:
     """
     Export stage: Save leads to CSV and generate reports.
@@ -216,8 +306,11 @@ def run_pipeline(vertical: str, region: str, max_results: int = 25) -> None:
         # Stage 4: Hunter.io (Tier A only)
         verified_leads = hunter_enrichment_stage(scored_leads)
         
-        # Stage 5: Export
-        export_stage(verified_leads, vertical, region)
+        # Stage 5: Tavily Deep Research (Tier A only)
+        researched_leads = tavily_research_stage(verified_leads)
+        
+        # Stage 6: Export
+        export_stage(researched_leads, vertical, region)
         
         log.success("🎉 Pipeline completed successfully!")
         
