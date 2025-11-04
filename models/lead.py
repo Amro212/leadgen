@@ -30,6 +30,11 @@ class Lead(BaseModel):
     email: Optional[str] = Field(None, description="Primary contact email")
     emails: List[str] = Field(default_factory=list, description="All found email addresses")
     
+    # Email verification (from Hunter.io)
+    emails_verified: bool = Field(False, description="Whether emails were verified via Hunter.io")
+    email_confidence: int = Field(0, ge=0, le=100, description="Email confidence score (0-100)")
+    hunter_verified: bool = Field(False, description="Hunter.io enrichment was run")
+    
     # Feature flags (from enrichment)
     has_contact_form: Optional[bool] = Field(None, description="Website has contact form")
     has_booking: Optional[bool] = Field(None, description="Supports online booking/appointments")

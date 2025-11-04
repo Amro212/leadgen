@@ -88,6 +88,75 @@ def scoring_stage(leads: List[Dict]) -> List[Lead]:
     return scored_leads
 
 
+def hunter_enrichment_stage(leads: List[Lead]) -> List[Lead]:
+    """
+    Hunter.io enrichment stage: Verify emails for Tier A leads only.
+    
+    Args:
+        leads: Scored Lead objects
+    
+    Returns:
+        List of leads with Hunter.io data (Tier A only enriched)
+    """
+    # Check if Hunter.io is available
+    try:
+        from enrichment.hunter_email_finder import HunterEmailFinder
+        from storage.api_usage import get_tracker
+        
+        tracker = get_tracker()
+        if not tracker.can_use('hunter', count=1):
+            log.info("⚠️ Hunter.io quota exhausted - skipping email verification")
+            return leads
+        
+        # Count Tier A leads
+        tier_a_leads = [lead for lead in leads if lead.tier == 'A']
+        
+        if not tier_a_leads:
+            log.info("ℹ️ No Tier A leads found - skipping Hunter.io enrichment")
+            return leads
+        
+        log.info(f"🔍 Hunter.io: Enriching {len(tier_a_leads)} Tier A leads")
+        
+        hunter = HunterEmailFinder()
+        enriched_count = 0
+        
+        for lead in tier_a_leads:
+            if lead.website:
+                # Find emails via Hunter.io
+                result = hunter.find_emails(lead.website, lead.business_name)
+                
+                # Update lead with Hunter.io data
+                if result['emails']:
+                    # Merge with existing emails
+                    existing_emails = lead.emails or []
+                    all_emails = list(set(existing_emails + result['emails']))
+                    lead.emails = all_emails
+                    
+                    # Update primary email if Hunter found one
+                    if result['primary_email'] and not lead.email:
+                        lead.email = result['primary_email']
+                    
+                    enriched_count += 1
+                
+                # Add Hunter.io metadata
+                lead.emails_verified = result['emails_verified']
+                lead.email_confidence = result['email_confidence']
+                lead.hunter_verified = True
+                
+                # Add note
+                if result['emails']:
+                    lead.notes.append(f"Hunter.io: Found {len(result['emails'])} emails (confidence: {result['email_confidence']}%)")
+                else:
+                    lead.notes.append("Hunter.io: No emails found")
+        
+        log.info(f"✓ Hunter.io: Enriched {enriched_count}/{len(tier_a_leads)} Tier A leads with verified emails")
+        
+    except Exception as e:
+        log.warning(f"⚠️ Hunter.io enrichment failed: {e}")
+    
+    return leads
+
+
 def export_stage(leads: List[Lead], vertical: str, region: str) -> None:
     """
     Export stage: Save leads to CSV and generate reports.
@@ -144,8 +213,11 @@ def run_pipeline(vertical: str, region: str, max_results: int = 25) -> None:
         # Stage 3: Scoring
         scored_leads = scoring_stage(enriched_leads)
         
-        # Stage 4: Export
-        export_stage(scored_leads, vertical, region)
+        # Stage 4: Hunter.io (Tier A only)
+        verified_leads = hunter_enrichment_stage(scored_leads)
+        
+        # Stage 5: Export
+        export_stage(verified_leads, vertical, region)
         
         log.success("🎉 Pipeline completed successfully!")
         

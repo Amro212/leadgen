@@ -169,6 +169,11 @@ def _format_lead_for_csv(lead: Lead) -> dict:
         'email': primary_email,
         'city': lead.city or "",
         
+        # Email verification (Hunter.io)
+        'emails_verified': format_bool(lead.emails_verified),
+        'email_confidence': lead.email_confidence if lead.email_confidence > 0 else "",
+        'hunter_verified': format_bool(lead.hunter_verified),
+        
         # Yelp metrics
         'yelp_rating': lead.yelp_rating if lead.yelp_rating and lead.yelp_rating > 0 else "",
         'yelp_review_count': lead.yelp_review_count if lead.yelp_review_count else "",
@@ -239,6 +244,9 @@ def export_to_csv(leads: List[Lead], vertical: str, region: str) -> str:
         'website',
         'phone',
         'email',
+        'emails_verified',
+        'email_confidence',
+        'hunter_verified',
         'city',
         'yelp_rating',
         'yelp_review_count',
