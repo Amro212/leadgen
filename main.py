@@ -12,25 +12,49 @@ from discovery.aggregator import discover_leads
 log = get_logger(__name__)
 
 
-def discovery_stage(vertical: str, region: str, max_results: int) -> List[Dict]:
+def discovery_stage(company_brief: str, max_results: int) -> List[Dict]:
     """
-    Discovery stage: Find businesses based on vertical and location.
+    Discovery stage: AI-powered query generation + business discovery.
     
     Args:
-        vertical: Business category (e.g., "HVAC")
-        region: Geographic location (e.g., "Milton, Ontario")
+        company_brief: 2-3 sentence company description (AI generates queries from this)
         max_results: Maximum number of leads to discover
     
     Returns:
         List of raw lead dictionaries
     """
-    log.info(f"🔍 Discovery: Searching for '{vertical}' in '{region}'")
+    log.info(f"🔍 Discovery: Analyzing company requirements...")
     
-    # Use aggregator to discover and dedupe leads (T08-T10)
-    leads = discover_leads(vertical, region, max_results)
+    # Step 1: Generate AI-powered search strategy
+    from outreach.query_generator import QueryGenerator
     
-    log.info(f"✓ Discovery complete: Found {len(leads)} unique leads")
-    return leads
+    query_gen = QueryGenerator()
+    strategy = query_gen.generate_search_strategy(company_brief, max_queries=4)
+    
+    # Step 2: Execute searches using AI-generated queries
+    all_leads = []
+    leads_per_query = max(1, max_results // len(strategy['primary_queries']))
+    
+    log.info(f"📋 Executing {len(strategy['primary_queries'])} targeted searches...")
+    
+    for i, query in enumerate(strategy['primary_queries'], 1):
+        log.info(f"   Search {i}/{len(strategy['primary_queries'])}: '{query}'")
+        
+        # Use aggregator to discover leads for this query
+        leads = discover_leads(query, strategy['location'], leads_per_query)
+        all_leads.extend(leads)
+        
+        log.info(f"      → Found {len(leads)} leads")
+    
+    # Step 3: Deduplicate across all queries
+    from discovery.aggregator import DiscoveryAggregator
+    aggregator = DiscoveryAggregator()
+    unique_leads = aggregator._deduplicate(all_leads)
+    
+    log.info(f"✓ Discovery complete: {len(unique_leads)} unique leads (from {len(all_leads)} total)")
+    
+    # Limit to max_results
+    return unique_leads[:max_results]
 
 
 def enrichment_stage(leads: List[Dict]) -> List[Dict]:
@@ -247,25 +271,30 @@ def tavily_research_stage(leads: List[Lead]) -> List[Lead]:
     return leads
 
 
-def export_stage(leads: List[Lead], vertical: str, region: str) -> None:
+def export_stage(leads: List[Lead], company_brief: str) -> None:
     """
     Export stage: Save leads to CSV and generate reports.
     
     Args:
         leads: Scored Lead objects
-        vertical: Business vertical for filename
-        region: Region for filename
+        company_brief: Company description for filename context
     """
     log.info(f"💾 Export: Saving {len(leads)} leads")
     
     from export.csv_export import export_to_csv, get_export_stats
     from export.report_generator import generate_summary_report
     
+    # Create simplified identifiers from company brief for filenames
+    # Use first few words as context
+    brief_words = company_brief.split()[:3]
+    context = "_".join(brief_words).lower()
+    context = "".join(c if c.isalnum() or c == "_" else "" for c in context)
+    
     # Export to CSV
-    csv_path = export_to_csv(leads, vertical, region)
+    csv_path = export_to_csv(leads, context, "leads")
     
     # Generate summary report
-    report_path = generate_summary_report(leads, vertical, region, csv_path)
+    report_path = generate_summary_report(leads, context, "leads", csv_path)
     
     # Get and log statistics
     stats = get_export_stats(leads)
@@ -277,25 +306,23 @@ def export_stage(leads: List[Lead], vertical: str, region: str) -> None:
             f"Avg={stats['avg_score']}")
 
 
-def run_pipeline(vertical: str, region: str, max_results: int = 25) -> None:
+def run_pipeline(company_brief: str, max_results: int = 25) -> None:
     """
     Run the full lead generation pipeline.
     
     Args:
-        vertical: Business category
-        region: Geographic location
+        company_brief: 2-3 sentence description of company and lead requirements
         max_results: Maximum leads to process
     """
     log.info("=" * 60)
-    log.info(f"🚀 Starting Lead Generation Pipeline")
-    log.info(f"   Vertical: {vertical}")
-    log.info(f"   Region: {region}")
+    log.info(f"🚀 Starting AI-Powered Lead Generation Pipeline")
+    log.info(f"   Company Brief: {company_brief}")
     log.info(f"   Max Results: {max_results}")
     log.info("=" * 60)
     
     try:
-        # Stage 1: Discovery
-        raw_leads = discovery_stage(vertical, region, max_results)
+        # Stage 1: Discovery (AI-powered query generation)
+        raw_leads = discovery_stage(company_brief, max_results)
         
         # Stage 2: Enrichment
         enriched_leads = enrichment_stage(raw_leads)
@@ -310,7 +337,7 @@ def run_pipeline(vertical: str, region: str, max_results: int = 25) -> None:
         researched_leads = tavily_research_stage(verified_leads)
         
         # Stage 6: Export
-        export_stage(researched_leads, vertical, region)
+        export_stage(researched_leads, company_brief)
         
         log.success("🎉 Pipeline completed successfully!")
         
@@ -322,21 +349,14 @@ def run_pipeline(vertical: str, region: str, max_results: int = 25) -> None:
 def main():
     """Main entry point with CLI argument parsing."""
     parser = argparse.ArgumentParser(
-        description="Lead Generation System - Discover, enrich, and score business leads"
+        description="Lead Generation System - AI-powered lead discovery, enrichment, and scoring"
     )
     
     parser.add_argument(
-        "--vertical",
+        "--company-brief",
         type=str,
         required=True,
-        help="Business vertical/category (e.g., 'HVAC', 'Plumber')"
-    )
-    
-    parser.add_argument(
-        "--region",
-        type=str,
-        required=True,
-        help="Geographic region (e.g., 'Milton, Ontario')"
+        help="2-3 sentence description of your company and lead requirements (e.g., 'Toronto SaaS company selling project management tools to construction firms')"
     )
     
     parser.add_argument(
@@ -350,8 +370,7 @@ def main():
     
     # Run the pipeline
     run_pipeline(
-        vertical=args.vertical,
-        region=args.region,
+        company_brief=args.company_brief,
         max_results=args.max
     )
 
