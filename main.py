@@ -14,47 +14,39 @@ log = get_logger(__name__)
 
 def discovery_stage(company_brief: str, max_results: int) -> List[Dict]:
     """
-    Discovery stage: AI-powered query generation + business discovery.
+    Discovery stage: PRECISION AI-powered search with structured API parameters.
     
     Args:
-        company_brief: 2-3 sentence company description (AI generates queries from this)
+        company_brief: 2-3 sentence company description (AI generates precise strategy)
         max_results: Maximum number of leads to discover
     
     Returns:
         List of raw lead dictionaries
     """
-    log.info(f"🔍 Discovery: Analyzing company requirements...")
+    log.info(f"🔍 Discovery: Generating PRECISION search strategy...")
     
-    # Step 1: Generate AI-powered search strategy
+    # Step 1: Generate AI-powered PRECISION search strategy
     from outreach.query_generator import QueryGenerator
     
     query_gen = QueryGenerator()
-    strategy = query_gen.generate_search_strategy(company_brief, max_queries=4)
+    strategy = query_gen.generate_search_strategy(company_brief)
     
-    # Step 2: Execute searches using AI-generated queries
-    all_leads = []
-    leads_per_query = max(1, max_results // len(strategy['primary_queries']))
+    # Step 2: Execute SINGLE precision search using structured parameters
+    log.info(f"🎯 Executing precision-targeted search...")
     
-    log.info(f"📋 Executing {len(strategy['primary_queries'])} targeted searches...")
-    
-    for i, query in enumerate(strategy['primary_queries'], 1):
-        log.info(f"   Search {i}/{len(strategy['primary_queries'])}: '{query}'")
-        
-        # Use aggregator to discover leads for this query
-        leads = discover_leads(query, strategy['location'], leads_per_query)
-        all_leads.extend(leads)
-        
-        log.info(f"      → Found {len(leads)} leads")
-    
-    # Step 3: Deduplicate across all queries
     from discovery.aggregator import DiscoveryAggregator
     aggregator = DiscoveryAggregator()
-    unique_leads = aggregator._deduplicate(all_leads)
     
-    log.info(f"✓ Discovery complete: {len(unique_leads)} unique leads (from {len(all_leads)} total)")
+    # Use the new structured discovery method
+    leads = aggregator.discover_structured(
+        yelp_params=strategy['yelp_search'],
+        google_query=strategy['google_places_search']['query'],
+        max_results=max_results
+    )
     
-    # Limit to max_results
-    return unique_leads[:max_results]
+    log.info(f"✓ Discovery complete: Found {len(leads)} precision-targeted leads")
+    
+    return leads[:max_results]
 
 
 def enrichment_stage(leads: List[Dict]) -> List[Dict]:
@@ -281,26 +273,42 @@ def export_stage(leads: List[Lead], company_brief: str) -> None:
     """
     log.info(f"💾 Export: Saving {len(leads)} leads")
     
-    from export.csv_export import export_to_csv, get_export_stats
+    from export.csv_export import export_leads, get_export_stats
     from export.report_generator import generate_summary_report
     
     # Create simplified identifiers from company brief for filenames
     # Use first few words as context
     brief_words = company_brief.split()[:3]
-    context = "_".join(brief_words).lower()
-    context = "".join(c if c.isalnum() or c == "_" else "" for c in context)
+    vertical = " ".join(brief_words)  # Use first 3 words as vertical
+    region = "Leads"  # Generic region since we're using AI briefs
     
-    # Export to CSV
-    csv_path = export_to_csv(leads, context, "leads")
+    # Export to CSV (universal compatibility)
+    csv_path = export_leads(
+        leads=leads,
+        vertical=vertical,
+        region=region,
+        output_format="csv",
+        sort_by_score=True
+    )
+    
+    # Export to XLSX (professional styling)
+    xlsx_path = export_leads(
+        leads=leads,
+        vertical=vertical,
+        region=region,
+        output_format="xlsx",
+        sort_by_score=True
+    )
     
     # Generate summary report
-    report_path = generate_summary_report(leads, context, "leads", csv_path)
+    report_path = generate_summary_report(leads, vertical, region, csv_path)
     
     # Get and log statistics
     stats = get_export_stats(leads)
     log.info(f"✓ Export complete:")
     log.info(f"  📄 CSV: {csv_path}")
-    log.info(f"  📊 Report: {report_path}")
+    log.info(f"  📊 XLSX: {xlsx_path}")
+    log.info(f"  📋 Report: {report_path}")
     log.info(f"  📈 Stats: {stats['total_leads']} leads, "
             f"A={stats['tier_a']}, B={stats['tier_b']}, C={stats['tier_c']}, "
             f"Avg={stats['avg_score']}")

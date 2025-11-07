@@ -119,6 +119,117 @@ class YelpFusionAPI(DiscoverySource):
             log.error(f"❌ Yelp API: Unexpected error: {e}")
             return []
     
+    def fetch_leads_structured(
+        self,
+        term: str,
+        location: str,
+        categories: Optional[str] = None,
+        price: Optional[str] = None,
+        attributes: Optional[str] = None,
+        sort_by: str = "best_match",
+        max_results: int = 50
+    ) -> List[Dict]:
+        """
+        Search for businesses using STRUCTURED Yelp Fusion API parameters.
+        This method uses all available Yelp filtering options for precision targeting.
+        
+        Args:
+            term: Search term (e.g., "construction software developers")
+            location: City and state/province (e.g., "Toronto, ON")
+            categories: Comma-separated Yelp category aliases (e.g., "softwaredev,itservices,contractors")
+                       See: https://www.yelp.com/developers/documentation/v3/all_category_list
+            price: Comma-separated price levels (e.g., "1,2,3" for $, $$, $$$)
+            attributes: Comma-separated attributes (e.g., "hot_and_new,deals,reservation,waitlist_reservation")
+            sort_by: Sort method - "best_match", "rating", "review_count", or "distance"
+            max_results: Maximum number of results (Yelp max: 50 per call)
+        
+        Returns:
+            List of lead dictionaries with business data
+        """
+        # Check quota before making API call
+        if not self.tracker.can_use('yelp', count=1):
+            remaining = self.tracker.get_remaining('yelp')
+            log.warning(f"⚠️ Yelp API quota exhausted (0/{self.tracker.state['yelp']['limit']} remaining)")
+            log.warning("   Returning empty results. Will reset tomorrow.")
+            return []
+        
+        # Yelp limits to 50 results per call
+        limit = min(max_results, 50)
+        
+        log.info(f"🔍 Yelp API (STRUCTURED): Searching for '{term}' in '{location}' (max {limit})")
+        if categories:
+            log.info(f"   📂 Categories: {categories}")
+        if price:
+            log.info(f"   💰 Price: {price}")
+        if attributes:
+            log.info(f"   🏷️ Attributes: {attributes}")
+        
+        try:
+            # Build request
+            headers = {
+                'Authorization': f'Bearer {self.api_key}',
+                'Accept': 'application/json'
+            }
+            
+            params = {
+                'term': term,
+                'location': location,
+                'limit': limit,
+                'sort_by': sort_by
+            }
+            
+            # Add optional structured parameters
+            if categories:
+                params['categories'] = categories
+            if price:
+                params['price'] = price
+            if attributes:
+                params['attributes'] = attributes
+            
+            # Make API call
+            response = requests.get(
+                self.BASE_URL,
+                headers=headers,
+                params=params,
+                timeout=10
+            )
+            
+            response.raise_for_status()
+            data = response.json()
+            
+            # Extract businesses
+            businesses = data.get('businesses', [])
+            total_found = data.get('total', 0)
+            
+            log.info(f"✓ Yelp API: Found {len(businesses)} businesses (total available: {total_found})")
+            
+            # Increment usage counter
+            self.tracker.increment('yelp', count=1)
+            remaining = self.tracker.get_remaining('yelp')
+            log.info(f"   📊 Yelp quota: {remaining}/{self.tracker.state['yelp']['limit']} remaining today")
+            
+            # Map to lead dictionaries
+            leads = [self._map_to_lead(biz, term) for biz in businesses]
+            
+            return leads
+            
+        except requests.exceptions.HTTPError as e:
+            if e.response.status_code == 429:
+                log.error("❌ Yelp API: Rate limit exceeded (429)")
+            elif e.response.status_code == 401:
+                log.error("❌ Yelp API: Invalid API key (401)")
+            else:
+                log.error(f"❌ Yelp API: HTTP error {e.response.status_code}")
+            return []
+            
+        except requests.exceptions.RequestException as e:
+            log.error(f"❌ Yelp API: Request failed: {e}")
+            return []
+            
+        except Exception as e:
+            log.error(f"❌ Yelp API: Unexpected error: {e}")
+            return []
+    
     def _map_to_lead(self, business: Dict, query: str) -> Dict:
         """
         Map Yelp business response to lead dictionary format.

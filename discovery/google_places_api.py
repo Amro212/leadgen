@@ -43,12 +43,18 @@ class GooglePlacesAPI(DiscoverySource):
         Search for businesses using Google Places API.
         
         Args:
-            query: Business category or search term (e.g., "Digital Agencies")
-            location: City and state/province (e.g., "Toronto, ON")
+            query: Natural language search query - can be detailed (10-15 words)
+                   Example: "established B2B SaaS development companies building enterprise 
+                            project management tools Toronto GTA 50+ employees founded 2015 or earlier"
+            location: City and state/province (e.g., "Toronto, ON") - can be empty if query includes location
             max_results: Maximum number of results (max: 60 with pagination)
         
         Returns:
             List of lead dictionaries with business data
+        
+        Note:
+            Google Places API excels with detailed, context-rich natural language queries.
+            The more specific the query, the better the results.
         """
         # Check quota before making API call
         if not self.tracker.can_use('google_places', count=1):

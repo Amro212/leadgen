@@ -40,6 +40,117 @@ class DiscoveryAggregator:
             log.warning(f"⚠️ Google Places API not available: {e}")
             self.google_places_api = None
     
+    def discover_structured(
+        self,
+        yelp_params: Dict,
+        google_query: str,
+        max_results: int = 25
+    ) -> List[Dict]:
+        """
+        PRECISION discovery using structured API parameters.
+        
+        Args:
+            yelp_params: Dict with term, location, categories, price, attributes, sort_by
+            google_query: Detailed 10-15 word natural language query
+            max_results: Maximum leads to return
+        
+        Returns:
+            List of unique, enriched lead dictionaries
+        """
+        log.info(f"Starting PRECISION discovery...")
+        log.info(f"   Yelp: {yelp_params.get('term')} | Categories: {yelp_params.get('categories')}")
+        log.info(f"   Google: {google_query[:80]}...")
+        
+        # Log current API usage
+        self.tracker.log_status()
+        
+        raw_leads = []
+        
+        # PRIORITY 1: Use Yelp with STRUCTURED parameters
+        if self.yelp_api and self.tracker.can_use('yelp', count=1):
+            log.info("🎯 Using Yelp Fusion API with STRUCTURED parameters")
+            yelp_leads = self.yelp_api.fetch_leads_structured(
+                term=yelp_params.get('term'),
+                location=yelp_params.get('location'),
+                categories=yelp_params.get('categories'),
+                price=yelp_params.get('price'),
+                attributes=yelp_params.get('attributes'),
+                sort_by=yelp_params.get('sort_by', 'best_match'),
+                max_results=max_results
+            )
+            
+            if yelp_leads:
+                raw_leads.extend(yelp_leads)
+                log.info(f"✓ Yelp API returned {len(yelp_leads)} precision-targeted leads")
+        else:
+            if not self.yelp_api:
+                log.warning("⚠️ Yelp API not initialized - skipping")
+            else:
+                remaining = self.tracker.get_remaining('yelp')
+                log.warning(f"⚠️ Yelp API quota exhausted ({remaining} remaining) - skipping")
+        
+        # PRIORITY 2: Use Google Places with DETAILED query
+        if len(raw_leads) < max_results:
+            remaining_needed = max_results - len(raw_leads)
+            
+            if self.google_places_api and self.tracker.can_use('google_places', count=1):
+                log.info(f"🎯 Using Google Places API with DETAILED query - need {remaining_needed} more leads")
+                
+                # Extract location from Yelp params for Google
+                location = yelp_params.get('location', '')
+                
+                # Google query already includes location, so pass empty string if query has it
+                google_leads = self.google_places_api.fetch_leads(google_query, location, remaining_needed)
+                
+                if google_leads:
+                    raw_leads.extend(google_leads)
+                    log.info(f"✓ Google Places API returned {len(google_leads)} precision-targeted leads")
+            else:
+                if not self.google_places_api:
+                    log.warning("⚠️ Google Places API not initialized - skipping")
+                else:
+                    remaining = self.tracker.get_remaining('google_places')
+                    log.warning(f"⚠️ Google Places API quota exhausted ({remaining} remaining) - skipping")
+        
+        # FALLBACK: Sample data generator (if not enough leads from APIs)
+        if len(raw_leads) < max_results:
+            remaining_needed = max_results - len(raw_leads)
+            log.info(f"📝 Using sample data generator for remaining {remaining_needed} leads")
+            sample_leads = self.google_scraper.fetch_leads(
+                yelp_params.get('term'),
+                yelp_params.get('location'),
+                remaining_needed
+            )
+            raw_leads.extend(sample_leads)
+        
+        log.info(f"Initial discovery returned {len(raw_leads)} leads")
+        
+        # Set discovery_method if not already set
+        for lead in raw_leads:
+            if 'discovery_method' not in lead or not lead['discovery_method']:
+                lead['discovery_method'] = 'sample_data_generator'
+        
+        # Step 2: Enrich with Yelp profile data (only for non-API leads)
+        enriched_leads = []
+        for lead in raw_leads:
+            # Skip enrichment if already from Yelp/Google API
+            if lead.get('discovery_method') in ['yelp_fusion_api', 'google_places_api']:
+                enriched_leads.append(lead)
+            else:
+                enriched = self.yelp_scraper.enrich_lead(lead)
+                enriched_leads.append(enriched)
+        
+        log.info(f"Enriched {len(enriched_leads)} leads with profile data")
+        
+        # Step 3: Deduplicate
+        unique_leads = self._deduplicate(enriched_leads)
+        log.info(f"After deduplication: {len(unique_leads)} unique leads")
+        
+        # Step 4: Normalize data
+        normalized_leads = [self._normalize_lead(lead) for lead in unique_leads]
+        
+        return normalized_leads[:max_results]
+    
     def discover_and_aggregate(
         self,
         query: str,

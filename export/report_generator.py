@@ -19,13 +19,15 @@ def generate_summary_report(leads: List[Lead], vertical: str, region: str, csv_f
         leads: List of Lead objects
         vertical: Business vertical
         region: Geographic region
-        csv_filepath: Path to the CSV file
+        csv_filepath: Path to the CSV or XLSX file (used for naming)
     
     Returns:
         Path to the created report file
     """
-    # Create report filename (same as CSV but .txt)
-    report_filepath = csv_filepath.replace('.csv', '_summary.txt')
+    # Create report filename (replace extension with _summary.txt)
+    from pathlib import Path
+    base_path = Path(csv_filepath).with_suffix('')
+    report_filepath = f"{base_path}_summary.txt"
     
     # Calculate statistics
     total = len(leads)

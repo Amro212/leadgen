@@ -36,63 +36,93 @@ class QueryGenerator:
         
         log.info("✅ AI Query Generator initialized (Gemini 2.0 Flash)")
     
-    def generate_search_strategy(self, company_brief: str, max_queries: int = 4) -> Dict:
+    def generate_search_strategy(self, company_brief: str) -> Dict:
         """
-        Generate optimized search strategy from company description.
+        Generate PRECISION search strategy with structured API parameters.
         
         Args:
             company_brief: 2-3 sentence description of the company and lead requirements
-            max_queries: Maximum number of queries to generate (default: 4)
         
         Returns:
             Dict with:
-                - primary_queries: List[str] - 3-5 optimized search terms
-                - location: str - Target geographic area
-                - reasoning: str - Why these queries were chosen
+                - yelp_search: Dict with term, location, categories, price, attributes, sort_by
+                - google_places_search: Dict with detailed natural language query
+                - tavily_research: Dict with query and include_domains
+                - lead_criteria: Dict with must_have, nice_to_have, deal_breakers
         """
-        log.info("🤖 Generating AI-powered search strategy...")
+        log.info("🤖 Generating PRECISION AI-powered search strategy...")
         log.info(f"   Company Brief: {company_brief[:100]}{'...' if len(company_brief) > 100 else ''}")
         
-        prompt = f"""You are a B2B lead generation expert. Analyze this company description and generate optimized search queries for finding relevant business leads.
+        prompt = f"""You are a B2B lead generation expert with deep knowledge of Yelp's category system and advanced search operators.
 
 Company Brief:
 {company_brief}
 
-Your task:
-1. Generate {max_queries} specific, targeted search queries (3-7 words each)
-2. Determine the best geographic location to search
-3. Explain your reasoning
+Generate a PRECISION search strategy using STRUCTURED API parameters (not generic queries).
 
-Rules:
-- Queries should focus on WHAT businesses do, not generic titles
-- Consider technical capabilities, industries served, and specializations
-- Think about adjacent/complementary businesses (e.g., "construction tech" also means "BIM software", "project management tools")
-- Location should match the company's target market (extract from brief if mentioned)
-- Be specific - avoid generic terms like "companies" or "agencies"
+CRITICAL RULES FOR YELP:
+1. Use EXACT Yelp category aliases from: https://www.yelp.com/developers/documentation/v3/all_category_list
+   Examples: "softwaredev", "itservices", "marketingagencies", "advertisingagencies", "contractors", "hvac", "plumbers"
+2. Set price filter to target company stage: "$,$$" for mid-market, "$$,$$$" for enterprise (avoid "$$$$")
+3. Use specific terms, not generic words like "companies" or "businesses"
+4. Add attributes: "has_website" (verified businesses only)
 
-Return ONLY a valid JSON object in this exact format (no markdown, no extra text):
+CRITICAL RULES FOR GOOGLE PLACES:
+1. Write a DETAILED 10-15 word natural language query
+2. Include: Industry + Location + Business size signals + Tech/process indicators + Timeframe
+3. Example: "established B2B SaaS development companies building enterprise project management tools Toronto GTA 50+ employees founded 2015 or earlier"
+
+CRITICAL RULES FOR LEAD CRITERIA:
+1. must_have: Features that are absolutely required (website, employees, established date)
+2. nice_to_have: Bonus features that increase lead quality
+3. deal_breakers: Exclude these types (freelancers, residential, solo practitioners)
+
+Return ONLY a valid JSON object (no markdown, no code blocks):
 {{
-  "primary_queries": [
-    "query 1",
-    "query 2", 
-    "query 3",
-    "query 4"
-  ],
-  "location": "City, Province/State",
-  "reasoning": "Brief explanation of strategy"
+  "yelp_search": {{
+    "term": "specific search term (5-8 words max)",
+    "location": "City, State/Province",
+    "categories": "category1,category2,category3",
+    "price": "$,$$",
+    "attributes": "has_website",
+    "sort_by": "best_match"
+  }},
+  "google_places_search": {{
+    "query": "detailed 10-15 word natural language query with industry location size tech timeframe"
+  }},
+  "tavily_research": {{
+    "query": "validation keywords for deep research",
+    "include_domains": ["linkedin.com", "crunchbase.com", "clutch.co"]
+  }},
+  "lead_criteria": {{
+    "must_have": ["website", "established_business"],
+    "nice_to_have": ["case_studies", "verified_clients"],
+    "deal_breakers": ["residential_only", "freelance", "solo_practitioner"]
+  }}
 }}
 
-Example input: "Shopify is a Toronto e-commerce company looking for agencies that build custom integrations and apps."
-Example output:
+Example for "Vancouver marketing agency targeting healthcare advertisers":
 {{
-  "primary_queries": [
-    "Shopify app developers Toronto",
-    "e-commerce integration specialists Canada",
-    "custom API development agencies Toronto",
-    "Shopify Plus partners Ontario"
-  ],
-  "location": "Toronto, ON",
-  "reasoning": "Focused on technical capabilities (integrations, APIs, apps) and Shopify ecosystem partners rather than generic web agencies"
+  "yelp_search": {{
+    "term": "healthcare medical advertising marketing",
+    "location": "San Francisco, CA",
+    "categories": "marketingagencies,advertisingagencies,mediaservices",
+    "price": "$$,$$$",
+    "attributes": "has_website",
+    "sort_by": "best_match"
+  }},
+  "google_places_search": {{
+    "query": "established healthcare advertising agencies managing pharmaceutical medical device campaigns San Francisco Bay Area enterprise clients 20+ employees founded 2010 or earlier with case studies"
+  }},
+  "tavily_research": {{
+    "query": "healthcare advertising agencies pharmaceutical medical device clients case studies",
+    "include_domains": ["linkedin.com", "clutch.co", "agencylist.com"]
+  }},
+  "lead_criteria": {{
+    "must_have": ["website", "established_2015_or_earlier", "10+_employees"],
+    "nice_to_have": ["healthcare_clients", "pharma_compliance", "case_studies"],
+    "deal_breakers": ["freelance", "solo_practitioner", "residential_only"]
+  }}
 }}
 
 Now generate for the company brief above:"""
@@ -112,16 +142,18 @@ Now generate for the company brief above:"""
             strategy = json.loads(response_text)
             
             # Validate structure
-            if 'primary_queries' not in strategy or 'location' not in strategy:
-                raise ValueError("Invalid strategy format - missing required fields")
+            required_keys = ['yelp_search', 'google_places_search', 'tavily_research', 'lead_criteria']
+            if not all(key in strategy for key in required_keys):
+                raise ValueError(f"Invalid strategy format - missing required fields. Expected: {required_keys}")
             
-            log.info(f"✓ AI Strategy Generated:")
-            log.info(f"   📍 Location: {strategy['location']}")
-            log.info(f"   🔍 Queries: {len(strategy['primary_queries'])}")
-            for i, query in enumerate(strategy['primary_queries'], 1):
-                log.info(f"      {i}. {query}")
-            if 'reasoning' in strategy:
-                log.info(f"   💡 Reasoning: {strategy['reasoning']}")
+            log.info(f"✓ PRECISION AI Strategy Generated:")
+            log.info(f"   📍 Location: {strategy['yelp_search'].get('location', 'N/A')}")
+            log.info(f"   🏷️ Yelp Categories: {strategy['yelp_search'].get('categories', 'N/A')}")
+            log.info(f"   💰 Price Filter: {strategy['yelp_search'].get('price', 'N/A')}")
+            log.info(f"   🔍 Yelp Term: {strategy['yelp_search'].get('term', 'N/A')}")
+            log.info(f"   🌐 Google Query: {strategy['google_places_search'].get('query', 'N/A')[:80]}...")
+            log.info(f"   ✅ Must Have: {', '.join(strategy['lead_criteria'].get('must_have', []))}")
+            log.info(f"   ❌ Deal Breakers: {', '.join(strategy['lead_criteria'].get('deal_breakers', []))}")
             
             return strategy
             
@@ -154,11 +186,28 @@ Now generate for the company brief above:"""
                     location = f"{loc.title()}, ON"
                     break
         
-        # Create generic query
-        queries = [company_brief[:50]]  # Use first 50 chars as query
+        # Create basic fallback query
+        term = company_brief[:50]  # Use first 50 chars as term
         
         return {
-            'primary_queries': queries,
-            'location': location,
-            'reasoning': 'Fallback strategy - AI generation failed'
+            'yelp_search': {
+                'term': term,
+                'location': location,
+                'categories': None,
+                'price': None,
+                'attributes': 'has_website',
+                'sort_by': 'best_match'
+            },
+            'google_places_search': {
+                'query': company_brief[:100]
+            },
+            'tavily_research': {
+                'query': term,
+                'include_domains': ['linkedin.com']
+            },
+            'lead_criteria': {
+                'must_have': ['website'],
+                'nice_to_have': [],
+                'deal_breakers': ['residential_only']
+            }
         }
