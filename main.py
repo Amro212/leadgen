@@ -49,12 +49,34 @@ def discovery_stage(company_brief: str, max_results: int) -> List[Dict]:
     return leads[:max_results]
 
 
-def enrichment_stage(leads: List[Dict]) -> List[Dict]:
+def website_discovery_stage(leads: List[Dict]) -> List[Dict]:
     """
-    Enrichment stage: Add additional data to leads.
+    Website discovery stage: Find actual business websites using multiple APIs.
     
     Args:
-        leads: Raw lead dictionaries from discovery
+        leads: Raw lead dictionaries from discovery (may have Yelp URLs or None)
+    
+    Returns:
+        Leads with actual business websites discovered
+    """
+    log.info(f"🌐 Website Discovery: Finding actual websites for {len(leads)} leads...")
+    
+    from enrichment.website_discovery import WebsiteDiscovery
+    discoverer = WebsiteDiscovery()
+    leads_with_websites = discoverer.discover_websites(leads)
+    
+    websites_found = sum(1 for lead in leads_with_websites if lead.get('website') and 'yelp.com' not in (lead.get('website') or '').lower())
+    log.info(f"✓ Website Discovery: Found {websites_found}/{len(leads)} actual websites")
+    
+    return leads_with_websites
+
+
+def enrichment_stage(leads: List[Dict]) -> List[Dict]:
+    """
+    Enrichment stage: Add additional data to leads (website scraping, etc.).
+    
+    Args:
+        leads: Lead dictionaries with actual websites discovered
     
     Returns:
         Enriched lead dictionaries
@@ -332,19 +354,22 @@ def run_pipeline(company_brief: str, max_results: int = 25) -> None:
         # Stage 1: Discovery (AI-powered query generation)
         raw_leads = discovery_stage(company_brief, max_results)
         
-        # Stage 2: Enrichment
-        enriched_leads = enrichment_stage(raw_leads)
+        # Stage 2: Website Discovery (find actual business websites)
+        leads_with_websites = website_discovery_stage(raw_leads)
         
-        # Stage 3: Scoring
+        # Stage 3: Enrichment (website scraping, contact forms, etc.)
+        enriched_leads = enrichment_stage(leads_with_websites)
+        
+        # Stage 4: Scoring (score leads based on enrichment data)
         scored_leads = scoring_stage(enriched_leads)
         
-        # Stage 4: Hunter.io (Tier A only)
+        # Stage 5: Hunter.io (Tier A only - email discovery)
         verified_leads = hunter_enrichment_stage(scored_leads)
         
-        # Stage 5: Tavily Deep Research (Tier A only)
+        # Stage 6: Tavily Deep Research (Tier A only - reputation, verification)
         researched_leads = tavily_research_stage(verified_leads)
         
-        # Stage 6: Export
+        # Stage 7: Export
         export_stage(researched_leads, company_brief)
         
         log.success("🎉 Pipeline completed successfully!")

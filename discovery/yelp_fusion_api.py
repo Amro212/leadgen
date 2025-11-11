@@ -261,14 +261,14 @@ class YelpFusionAPI(DiscoverySource):
         
         lead = {
             'business_name': business.get('name'),
-            'website': business.get('url'),  # This is the Yelp URL, not business website
+            'website': None,  # Yelp search endpoint doesn't provide actual business website
             'phone': phone,
             'city': location.get('city'),
             'state': location.get('state'),
             'country': location.get('country', 'US'),
             'address': address,
             'zip_code': location.get('zip_code'),
-            'source_url': business.get('url'),
+            'source_url': business.get('url'),  # Store Yelp URL as source_url
             'discovery_method': 'yelp_fusion_api',
             'yelp_rating': business.get('rating'),  # 1-5 star rating
             'yelp_review_count': business.get('review_count'),  # Number of reviews
@@ -277,8 +277,8 @@ class YelpFusionAPI(DiscoverySource):
             'notes': [f"Yelp search: '{query}'"]  # Changed from internal_notes to notes (list field)
         }
         
-        # Note: Yelp doesn't provide actual business website in the search endpoint
-        # We'll need to check if we can extract it during enrichment or use a different field
+        # Note: Yelp search endpoint doesn't provide actual business website
+        # Website will be discovered in website_discovery stage using SerpAPI/Tavily/Google Places
         log.debug(f"   Mapped: {lead['business_name']} | {lead['phone']} | {lead['city']}")
         
         return lead

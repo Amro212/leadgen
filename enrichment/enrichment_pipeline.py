@@ -44,9 +44,9 @@ class WebsiteEnrichment(EnrichmentSource):
         for lead in leads:
             enriched_lead = lead.copy()
             
-            # Only enrich if lead has a website
-            if lead.get('website'):
-                website = lead['website']
+            # Only enrich if lead has a real website (not Yelp URL)
+            website = lead.get('website')
+            if website and 'yelp.com' not in website.lower():
                 
                 try:
                     # Scrape website for signals

@@ -17,7 +17,12 @@ def main():
     query_gen = QueryGenerator()
     
     # Test with a sample company brief
-    company_brief = input("Enter company brief (or press Enter for default): ").strip()
+    import sys
+    try:
+        company_brief = input("Enter company brief (or press Enter for default): ").strip()
+    except (EOFError, KeyboardInterrupt):
+        # Non-interactive mode or cancelled
+        company_brief = ""
     
     if not company_brief:
         company_brief = "Toronto SaaS company selling project management tools to construction firms"
@@ -39,7 +44,14 @@ def main():
     print(f"📍 Location: {yelp.get('location')}")
     print(f"🔍 Term: {yelp.get('term')}")
     print(f"🏷️  Categories: {yelp.get('categories')}")
-    print(f"� Price: {yelp.get('price')}")
+    price = yelp.get('price', 'N/A')
+    if price:
+        # Convert numeric to readable format for display
+        price_map = {'1': '$', '2': '$$', '3': '$$$', '4': '$$$$'}
+        price_display = ','.join([price_map.get(p, p) for p in str(price).split(',')])
+        print(f"💰 Price: {price} ({price_display})")
+    else:
+        print(f"💰 Price: {price}")
     print(f"✅ Attributes: {yelp.get('attributes')}")
     print(f"📊 Sort By: {yelp.get('sort_by')}")
     print()
@@ -51,13 +63,36 @@ def main():
     print(f"🌐 Query: {google.get('query')}")
     print()
     
+    if 'serpapi_search' in strategy:
+        print("=" * 70)
+        print("SERPAPI SEARCH (Web Search)")
+        print("=" * 70)
+        serpapi = strategy['serpapi_search']
+        print(f"🔎 Query: {serpapi.get('query')}")
+        print(f"📍 Location: {serpapi.get('location')}")
+        print(f"🔧 Engine: {serpapi.get('engine')}")
+        print()
+    
     print("=" * 70)
     print("TAVILY RESEARCH")
     print("=" * 70)
     tavily = strategy['tavily_research']
     print(f"🔍 Query: {tavily.get('query')}")
-    print(f"🌐 Domains: {', '.join(tavily.get('include_domains', []))}")
+    print(f"🌐 Include Domains: {', '.join(tavily.get('include_domains', []))}")
+    if tavily.get('exclude_domains'):
+        print(f"🚫 Exclude Domains: {', '.join(tavily.get('exclude_domains', []))}")
     print()
+    
+    if 'hunter_strategy' in strategy:
+        print("=" * 70)
+        print("HUNTER.IO STRATEGY (Email Discovery)")
+        print("=" * 70)
+        hunter = strategy['hunter_strategy']
+        if hunter.get('domain_patterns'):
+            print(f"🔗 Domain Patterns: {', '.join(hunter.get('domain_patterns', []))}")
+        print(f"📧 Email Formats: {', '.join(hunter.get('email_formats', []))}")
+        print(f"👥 Priority Departments: {', '.join(hunter.get('priority_departments', []))}")
+        print()
     
     print("=" * 70)
     print("LEAD CRITERIA")
